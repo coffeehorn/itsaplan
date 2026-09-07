@@ -34,6 +34,7 @@ import {
 import type { IssueQuery } from '#modules/agents/core/issue-query';
 import { iso, num, numOrNull, HttpError } from '#shared/lib';
 import type { ProjectRow } from '#modules/projects/service';
+import { assertProjectFeature } from '#shared/access';
 import {
   getCustomFieldById,
   type CustomFieldRow,
@@ -728,6 +729,7 @@ async function assertInitiative(
   initiativeId: number | null | undefined,
 ): Promise<void> {
   if (initiativeId == null) return;
+  await assertProjectFeature(projectId, 'initiatives');
   if ((await getInitiativeProjectId(initiativeId)) !== projectId)
     throw new HttpError(400, 'Initiative must belong to this project');
 }
@@ -743,6 +745,7 @@ async function assertCycle(
   currentCycleId: number | null = null,
 ): Promise<void> {
   if (cycleId == null || cycleId === currentCycleId) return;
+  await assertProjectFeature(projectId, 'cycles');
   const ref = await getCycleRef(cycleId);
   if (!ref || ref.projectId !== projectId)
     throw new HttpError(400, 'Cycle must belong to this project');
@@ -786,6 +789,7 @@ async function assertParent(
   parentId: number | null | undefined,
 ): Promise<void> {
   if (parentId == null) return;
+  await assertProjectFeature(projectId, 'subtasks');
   if (parentId === issueId) throw new HttpError(400, 'An issue cannot be its own parent');
   const rows = await db
     .select({ projectId: issue.projectId, parentId: issue.parentId })
@@ -1083,10 +1087,11 @@ export async function updateIssue(
 async function enqueueDelegateRun(after: IssueRow, actor?: ActivityActor): Promise<void> {
   const delegate = after.delegateUserId;
   if (!delegate || delegate === actorId(actor)) return;
-  const agent = await getAssignTriggerAgent(delegate, actorId(actor));
+  const agent = await getAssignTriggerAgent(after.projectId, delegate, actorId(actor));
   if (!agent) return;
   await enqueueAgentRun({
     agentId: agent.id,
+    projectId: after.projectId,
     issueId: after.id,
     sourceActivityId: null,
     prompt: `Work item ${after.identifier}: "${after.title}" has been delegated to you. Review it and take the appropriate next step.`,
@@ -1456,18 +1461,20 @@ async function assertFieldMember(
 // queue a run so it can act on the issue. Skipped when the agent set itself. The run
 // is executed later, so the write is never blocked on it.
 async function enqueueFieldRun(
+  projectId: number,
   issueId: number,
   field: CustomFieldRow,
   userId: string,
   actorUserId: string | null | undefined,
 ): Promise<void> {
   if (userId === actorUserId) return;
-  const agent = await getFieldTriggerAgent(userId, field.id, actorUserId ?? null);
+  const agent = await getFieldTriggerAgent(projectId, userId, field.id, actorUserId ?? null);
   if (!agent) return;
   const row = await getIssue(issueId);
   if (!row) return;
   await enqueueAgentRun({
     agentId: agent.id,
+    projectId,
     issueId,
     sourceActivityId: null,
     trigger: 'field',
@@ -1653,7 +1660,7 @@ export async function setIssueFieldValue(
   );
 
   if (memberUserId && memberUserId !== previousMemberUserId) {
-    await enqueueFieldRun(issueId, field, memberUserId, actorUserId);
+    await enqueueFieldRun(projectId, issueId, field, memberUserId, actorUserId);
     await notifyFieldMember(projectId, issueId, memberUserId, entry?.id ?? null, actorUserId);
   }
 

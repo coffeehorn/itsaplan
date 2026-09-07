@@ -329,7 +329,7 @@ export default function NewIssueModal({
           />
         )
       }
-      projectKey={project.project.key}
+      scope={project.project.key}
       onClose={onClose}
       // The template pill comes before the title in the DOM, so the title has to
       // claim the focus itself.
@@ -507,7 +507,7 @@ export default function NewIssueModal({
             onAnnotate={annotateAttachment}
             onRemove={removeAttachment}
           />
-          <Button className="ml-auto" disabled={saving || !title.trim()} onClick={submit}>
+          <Button className="ms-auto" disabled={saving || !title.trim()} onClick={submit}>
             {t('submit')}
           </Button>
         </div>

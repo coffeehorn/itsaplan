@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { authedApi } from '#tests/helpers/app';
 import { signUpTestUser } from '#tests/helpers/auth';
 import { resetDb } from '#tests/helpers/db';
+import { createRole } from '#tests/helpers/roles';
 
 type Client = ReturnType<typeof authedApi>;
 
@@ -341,9 +342,10 @@ describe('documents', () => {
       ).status,
     ).toBe(204);
 
-    const readerRole = await owner.api
-      .projects({ projectKey: 'MKT' })
-      .roles.post({ name: 'Reader', permissions: { documents: { read: true } } });
+    const readerRole = await createRole(owner.api, 'MKT', {
+      name: 'Reader',
+      permissions: { documents: { read: true } },
+    });
     const reader = await addMember(owner.api, readerRole.data!.id);
     expect((await documents(reader.api).get({ query: {} })).status).toBe(200);
     expect((await documents(reader.api)({ documentId: document.id }).get()).status).toBe(200);
@@ -367,9 +369,10 @@ describe('documents', () => {
       ).status,
     ).toBe(403);
 
-    const blockedRole = await owner.api
-      .projects({ projectKey: 'MKT' })
-      .roles.post({ name: 'No documents', permissions: {} });
+    const blockedRole = await createRole(owner.api, 'MKT', {
+      name: 'No documents',
+      permissions: {},
+    });
     const blocked = await addMember(owner.api, blockedRole.data!.id);
     expect((await documents(blocked.api).get({ query: {} })).status).toBe(403);
     expect((await documents(blocked.api)({ documentId: document.id }).get()).status).toBe(403);
@@ -408,7 +411,7 @@ describe('documents', () => {
       ).status,
     ).toBe(204);
 
-    const readerRole = await owner.api.projects({ projectKey: 'MKT' }).roles.post({
+    const readerRole = await createRole(owner.api, 'MKT', {
       name: 'Context reader',
       permissions: { documents: { read: true }, work_items: { read: true } },
     });

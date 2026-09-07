@@ -5,12 +5,14 @@ import {
   documentAsset,
   issue,
   issueAttachment,
+  project,
   projectDocument,
 } from '@repo/db';
 import { eq, sql } from 'drizzle-orm';
 import { putObject, getObject, deleteObject } from '#shared/s3';
 import { HttpError, num } from '#shared/lib';
 import { getStorageSettings, mimeAllowed, MB } from '#modules/settings/service';
+import { getLimits } from '#shared/limits';
 
 export type AttachmentStorageExecutor =
   typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -40,6 +42,30 @@ async function projectStoredBytes(
   return num(issues[0]?.total ?? 0) + num(chats[0]?.total ?? 0) + num(documents[0]?.total ?? 0);
 }
 
+async function teamStoredBytes(
+  executor: AttachmentStorageExecutor,
+  teamId: number,
+): Promise<number> {
+  const issues = await executor
+    .select({ total: sql<string>`coalesce(sum(${issueAttachment.sizeBytes}), 0)` })
+    .from(issueAttachment)
+    .innerJoin(issue, eq(issue.id, issueAttachment.issueId))
+    .innerJoin(project, eq(project.id, issue.projectId))
+    .where(eq(project.teamId, teamId));
+  const chats = await executor
+    .select({ total: sql<string>`coalesce(sum(${chatAttachment.sizeBytes}), 0)` })
+    .from(chatAttachment)
+    .innerJoin(project, eq(project.id, chatAttachment.projectId))
+    .where(eq(project.teamId, teamId));
+  const documents = await executor
+    .select({ total: sql<string>`coalesce(sum(${documentAsset.sizeBytes}), 0)` })
+    .from(documentAsset)
+    .innerJoin(projectDocument, eq(projectDocument.id, documentAsset.documentId))
+    .innerJoin(project, eq(project.id, projectDocument.projectId))
+    .where(eq(project.teamId, teamId));
+  return num(issues[0]?.total ?? 0) + num(chats[0]?.total ?? 0) + num(documents[0]?.total ?? 0);
+}
+
 export async function assertAttachmentStorageCapacity(
   projectId: number,
   addedBytes: number,
@@ -47,13 +73,33 @@ export async function assertAttachmentStorageCapacity(
   executor: AttachmentStorageExecutor = db,
 ): Promise<void> {
   const limits = await getStorageSettings();
-  if (limits.projectQuotaMb <= 0) return;
-  const used = (await projectStoredBytes(executor, projectId)) - replacedBytes;
-  if (used + addedBytes > limits.projectQuotaMb * MB) {
-    throw new HttpError(
-      413,
-      `The project has used its ${limits.projectQuotaMb} MB storage quota. Delete attachments to free space.`,
-    );
+  if (limits.projectQuotaMb > 0) {
+    const used = (await projectStoredBytes(executor, projectId)) - replacedBytes;
+    if (used + addedBytes > limits.projectQuotaMb * MB) {
+      throw new HttpError(
+        413,
+        `The project has used its ${limits.projectQuotaMb} MB storage quota. Delete attachments to free space.`,
+      );
+    }
+  }
+  // The instance quota above is per project; a team may hold a ceiling of its own
+  // across all of them. The team is read through the same executor: a project copy
+  // checks the quota of a project its own transaction has not committed yet.
+  const [owner] = await executor
+    .select({ teamId: project.teamId })
+    .from(project)
+    .where(eq(project.id, projectId));
+  if (!owner) throw new HttpError(404, 'Project not found');
+  const teamId = owner.teamId;
+  const { maxStorageBytes } = await getLimits({ teamId });
+  if (maxStorageBytes > 0) {
+    const used = (await teamStoredBytes(executor, teamId)) - replacedBytes;
+    if (used + addedBytes > maxStorageBytes) {
+      throw new HttpError(
+        413,
+        `The team has used its ${Math.round(maxStorageBytes / MB)} MB of storage. Delete attachments to free space.`,
+      );
+    }
   }
 }
 

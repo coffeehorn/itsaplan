@@ -73,7 +73,7 @@ apps/api        Elysia (Bun) — mounts better-auth at /api/auth/*        :3000
 apps/web        Next.js App Router, SSR (not SPA) + shadcn + TanStack Q :3001
 apps/worker     webhook and notification delivery, agent runs, schedules
 apps/bot        Telegram bot, long polling
-packages/db     @repo/db     — Drizzle client, schema, migrations
+packages/db     @repo/db     — Drizzle client, schema, migrations, permission matrix
 packages/auth   @repo/auth   — better-auth server instance + instance auth settings
 packages/crypto @repo/crypto — AES-256-GCM encryption for secrets at rest
 packages/mailer @repo/mailer — SMTP/Resend transport for outbound email
@@ -172,7 +172,8 @@ are the part to preserve when changing the script:
 
 A change to the deploy stack usually has to land in **all three** of `docker-compose.yml`,
 `docker-compose.coolify.yml`, and `docker-compose.coolify-images.yml`. The **api applies migrations on startup** (`migrate.ts` in
-its Dockerfile CMD). `bot` runs Telegram long polling and must stay at one replica.
+its Dockerfile CMD), and dumps the database into the `db-backups` volume first — a failed
+dump stops the startup, so nothing is migrated without a way back. `bot` runs Telegram long polling and must stay at one replica.
 
 ## Test gate (Docker)
 

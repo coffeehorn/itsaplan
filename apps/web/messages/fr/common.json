@@ -51,7 +51,6 @@
         "toggle": "Ouvrir la palette de commandes"
       },
       "project": {
-        "switch": "Basculer vers le projet 1 à 9",
         "new": "Nouveau projet",
         "settings": "Ouvrir les paramètres du projet"
       },
@@ -176,5 +175,13 @@
   "chart": {
     "download": "Enregistrer le graphique",
     "downloadFailed": "Le graphique n'a pas pu être enregistré"
+  },
+  "agent": "Agent",
+  "pager": {
+    "previous": "Page précédente",
+    "next": "Page suivante",
+    "page": "Page {number}",
+    "perPage": "par page",
+    "range": "{first}-{last} sur {total}"
   }
 }
