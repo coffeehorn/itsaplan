@@ -107,6 +107,10 @@ services:
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-}
+      # Hosts an operator has decided to trust even though they resolve privately, so a
+      # self-hosted Gitea/Forgejo/GitLab on the same network can be connected. The same
+      # list also governs webhook URL validation and attachment import in this process.
+      SSRF_ALLOWED_HOSTS: ${SSRF_ALLOWED_HOSTS:-}
     # start_period covers the migrations the container applies before it listens.
     healthcheck:
       test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:3000/']
@@ -140,6 +144,9 @@ services:
       TELEMETRY_DISABLED: ${TELEMETRY_DISABLED:-}
       DO_NOT_TRACK: ${DO_NOT_TRACK:-}
       TELEMETRY_DEBUG: ${TELEMETRY_DEBUG:-}
+      # The same list the api reads. This process DELIVERS webhooks, so a host named here
+      # is reachable as a delivery target from the worker as well.
+      SSRF_ALLOWED_HOSTS: ${SSRF_ALLOWED_HOSTS:-}
       # Optional tuning lives in apps/worker/src/config.ts.
 
   # Telegram bot: long polling for the instance bot, completing the account links
